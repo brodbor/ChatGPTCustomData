@@ -5,28 +5,37 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json;
-
+using Microsoft.WindowsAzure.Storage;
+using Microsoft.WindowsAzure.Storage.Table;
 
 
 using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Extensions.Http;
 using Microsoft.Extensions.Logging;
 
-
+public class QS : TableEntity
+{    
+    public string qs { get; set;}
+}
 
 
 
 public static class ChatGPTCustom
 {
+
+
+
+
+    
     [FunctionName("ChatGPTCustom")]
   public static async Task<IActionResult>  Run(
             [HttpTrigger(AuthorizationLevel.Anonymous, "get", "post", Route = null)] HttpRequest req,
             ILogger log)
     {
-   log.LogInformation("C# HTTP trigger function processed a request.");
-
-         try
+            try    
         {
+
+
         // Configure in Function->Configuration->applicaiton Settings
         string AOAIEndpoint =   Environment.GetEnvironmentVariable("AOAIEndpoint");
         string AOAIDeploymentId = Environment.GetEnvironmentVariable("AOAIDeploymentId");
@@ -89,6 +98,16 @@ public static class ChatGPTCustom
 
             // Read the response content
             string responseContent = await response.Content.ReadAsStringAsync();
+        
+
+
+
+            //log request query
+            await SaveDataToTableStorage(userMessage);
+
+
+
+
 
             // Return the response from the API
             return new ContentResult
@@ -111,5 +130,32 @@ public static class ChatGPTCustom
                 StatusCode = 500
             };
         }
+
+
     }
+
+
+
+    
+ private static async Task SaveDataToTableStorage(string userMessage)
+    {
+
+                 string AOAITableConnString =   Environment.GetEnvironmentVariable("AOAITableConnString");
+
+                CloudStorageAccount storageAccount = CloudStorageAccount.Parse(AOAITableConnString);
+                CloudTableClient tableClient = storageAccount.CreateCloudTableClient();
+                CloudTable table = tableClient.GetTableReference("aoiqs");
+                await table.CreateIfNotExistsAsync();
+
+                QS entity = new QS{ qs= userMessage};
+
+                entity.PartitionKey = "bb";
+                entity.RowKey = Guid.NewGuid().ToString();
+
+                TableOperation insertOperation = TableOperation.InsertOrReplace(entity);
+
+                await table.ExecuteAsync(insertOperation);
+
+    }
+
 }
